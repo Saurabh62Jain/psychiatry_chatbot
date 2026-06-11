@@ -111,6 +111,12 @@ def add_custom_style(image_path="background.jpg"):
     
     # Custom CSS base
     css = """<style>
+/* Hide Streamlit default UI elements (Deploy button, MainMenu, Header, Footer) */
+header {visibility: hidden !important; height: 0px !important;}
+footer {visibility: hidden !important;}
+#MainMenu {visibility: hidden !important;}
+.stAppDeployButton {display: none !important;}
+
 /* Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
 
