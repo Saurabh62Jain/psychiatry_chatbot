@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 from typing import Any, List, Optional
 from dotenv import load_dotenv
@@ -203,6 +204,170 @@ section[data-testid="stSidebar"] {
         
     st.markdown(css, unsafe_allow_html=True)
 
+def render_speaker_button(text: str, key: str):
+    """Renders a custom glassmorphic HTML/JS speaker button that reads text aloud using Web Speech API."""
+    import json
+    # Use json.dumps to safely escape characters (quotes, backslashes, newlines) for Javascript
+    safe_text = json.dumps(text)
+    
+    html_code = f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap');
+    
+    body {{
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        font-family: 'Outfit', sans-serif;
+        overflow: hidden;
+    }}
+    
+    .tts-container {{
+        display: flex;
+        align-items: center;
+        margin-top: 4px;
+        margin-bottom: 4px;
+    }}
+    
+    .speaker-btn {{
+        background: rgba(46, 90, 80, 0.08);
+        border: 1px solid rgba(46, 90, 80, 0.15);
+        color: #2E5A50;
+        border-radius: 20px;
+        padding: 5px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s ease-in-out;
+        outline: none;
+        user-select: none;
+    }}
+    
+    .speaker-btn:hover {{
+        background: rgba(46, 90, 80, 0.16);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(46, 90, 80, 0.08);
+    }}
+    
+    .speaker-btn:active {{
+        transform: translateY(0);
+    }}
+    
+    .speaker-btn.playing {{
+        background: #2E5A50;
+        color: white;
+        border-color: #2E5A50;
+    }}
+    
+    .speaker-btn.playing:hover {{
+        background: #244840;
+    }}
+    
+    /* Subtle pulsing soundwave icon when playing */
+    .soundwave {{
+        display: none;
+        align-items: center;
+        gap: 2px;
+        height: 10px;
+        width: 12px;
+    }}
+    
+    .speaker-btn.playing .soundwave {{
+        display: flex;
+    }}
+    
+    .speaker-btn.playing .static-icon {{
+        display: none;
+    }}
+    
+    .bar {{
+        width: 2px;
+        height: 100%;
+        background-color: white;
+        border-radius: 1px;
+        animation: bounce 0.8s ease-in-out infinite alternate;
+    }}
+    .bar:nth-child(2) {{ animation-delay: 0.25s; }}
+    .bar:nth-child(3) {{ animation-delay: 0.5s; }}
+    
+    @keyframes bounce {{
+        0% {{ height: 3px; }}
+        100% {{ height: 10px; }}
+    }}
+    </style>
+    
+    <div class="tts-container">
+        <button id="btn" class="speaker-btn" onclick="toggleSpeech()">
+            <span class="static-icon">🔊</span>
+            <div class="soundwave">
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+            </div>
+            <span id="label">Read Aloud</span>
+        </button>
+    </div>
+    
+    <script>
+    let synth = window.speechSynthesis || window.parent.speechSynthesis;
+    let utterance = null;
+    let isPlaying = false;
+    
+    function toggleSpeech() {{
+        const btn = document.getElementById('btn');
+        const label = document.getElementById('label');
+        const textToSpeak = {safe_text};
+        
+        if (!synth) {{
+            alert("Text-to-speech is not supported in this browser.");
+            return;
+        }}
+        
+        if (isPlaying) {{
+            synth.cancel();
+            setStopState();
+        }} else {{
+            synth.cancel();
+            
+            utterance = new SpeechSynthesisUtterance(textToSpeak);
+            utterance.rate = 0.95;
+            utterance.pitch = 1.05;
+            
+            utterance.onend = function() {{
+                setStopState();
+            }};
+            
+            utterance.onerror = function() {{
+                setStopState();
+            }};
+            
+            synth.speak(utterance);
+            isPlaying = true;
+            btn.classList.add('playing');
+            label.textContent = "Stop Reading";
+        }}
+    }}
+    
+    function setStopState() {{
+        const btn = document.getElementById('btn');
+        const label = document.getElementById('label');
+        isPlaying = false;
+        btn.classList.remove('playing');
+        label.textContent = "Read Aloud";
+    }}
+    
+    window.addEventListener('unload', () => {{
+        if (isPlaying && synth) {{
+            synth.cancel();
+        }}
+    }});
+    </script>
+    """
+    components.html(html_code, height=36)
+
 def main():
     add_custom_style("background.jpg")
     st.title("AI Psychiatry Therapy Session")
@@ -218,8 +383,15 @@ def main():
         st.session_state.messages = []
 
     # Display previous messages
-    for message in st.session_state.messages:
-        st.chat_message(message["role"]).markdown(message["content"])
+    for idx, message in enumerate(st.session_state.messages):
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+            if message["role"] == "assistant":
+                speak_text = message.get("speak_content")
+                if not speak_text:
+                    parts = message["content"].split("\n\n---\n**Source Documents:**")
+                    speak_text = parts[0]
+                render_speaker_button(speak_text, key=f"speak_{idx}")
 
     # Chat Input
     prompt = st.chat_input("Ask a medical question based on the textbook...")
@@ -261,8 +433,14 @@ def main():
                 result_to_show += f"* Source {i}: {file_name} (Page {page_num})\n"
 
             # Display response
-            st.chat_message("assistant").markdown(result_to_show)
-            st.session_state.messages.append({"role": "assistant", "content": result_to_show})
+            with st.chat_message("assistant"):
+                st.markdown(result_to_show)
+                render_speaker_button(result, key=f"speak_{len(st.session_state.messages)}")
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": result_to_show,
+                "speak_content": result
+            })
 
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
